@@ -136,6 +136,9 @@ class QualityLLM(FakeLLM):
             prefix = f"{target}: " if target else ""
             lines.append(f"{n}) {prefix}'{title}'에 따라 {advice}")
             n += 1
+        for c in [c for c in collected if c["source"] == "research_error"]:
+            lines.append(f"{n}) {c['data']['system']}: 조회에 실패해 수치를 확인하지 못했습니다.")
+            n += 1
         for c in miss:
             names = ", ".join(m["system"] for m in c["data"]["systems"])
             lines.append(f"{n}) {names}: 맞는 대응 매뉴얼을 찾지 못했습니다. 담당자 확인이 필요합니다.")

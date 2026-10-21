@@ -33,16 +33,21 @@ async def research_node(state: AgentState, deps: SupervisorDeps) -> dict:
             "get_incident_runbook")
 
     async def run_one(idx: int) -> dict:
+        """조사 하나의 실패가 gather 전체로 번지지 않도록 예외를 이 task의 결과로 바꾼다.
+        재시도 판단은 안쪽 with_retry가 이미 했으므로 여기서는 넓게 잡는다(Capstone 12장 오류 격리)."""
         task = tasks[idx]
         await asyncio.sleep(0.35)   # 태스크당 고정 지연 — 병렬 효과를 실측하기 위함
-        if task["kind"] == "monitoring":
-            data, retries = await with_retry(
-                deps.mcp.call_tool, "get_monitoring_status",
-                {"system_name": task["target"]})
-            return {"idx": idx, "source": "monitoring", "data": data, "retries": retries}
-        uri = runbook_uri_template.format(incident_type=task["target"])
-        data = await deps.mcp.read_resource(uri, server=runbook_server)
-        return {"idx": idx, "source": "runbook", "data": data, "retries": 0}
+        try:
+            if task["kind"] == "monitoring":
+                data, retries = await with_retry(
+                    deps.mcp.call_tool, "get_monitoring_status",
+                    {"system_name": task["target"]})
+                return {"idx": idx, "source": "monitoring", "data": data, "retries": retries}
+            uri = runbook_uri_template.format(incident_type=task["target"])
+            data = await deps.mcp.read_resource(uri, server=runbook_server)
+            return {"idx": idx, "source": "runbook", "data": data, "retries": 0}
+        except Exception as e:
+            return {"idx": idx, "source": "error", "error": f"{type(e).__name__}: {e}", "retries": 0}
 
     started = time.perf_counter()
     results = await asyncio.gather(*(run_one(i) for i in research_indices))
@@ -52,9 +57,19 @@ async def research_node(state: AgentState, deps: SupervisorDeps) -> dict:
     collected = list(state.get("collected", []))
     events = list(state["events"])
     for r in results:
-        new_tasks[r["idx"]]["status"] = "done"
+        task = new_tasks[r["idx"]]
+        systems = task.get("systems") or ([task["target"]] if task["kind"] == "monitoring" else [])
+        if r["source"] == "error":
+            task["status"] = "failed"
+            collected.append({"source": "research_error",
+                              "data": {"system": ", ".join(systems) or task["target"], "error": r["error"]},
+                              "systems": systems})
+            events.append({"type": "TaskFailed", "id": task["id"], "target": task["target"],
+                           "error": r["error"]})
+            continue
+        task["status"] = "done"
         collected.append({"source": r["source"], "data": r["data"],
-                          "systems": new_tasks[r["idx"]].get("systems", [])})
+                          "systems": task.get("systems", [])})
         retry_total += r["retries"]
         events.append({"type": "TaskCompleted", "id": new_tasks[r["idx"]]["id"],
                        "source": r["source"], "target": new_tasks[r["idx"]]["target"],

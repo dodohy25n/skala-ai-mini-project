@@ -47,8 +47,10 @@ def _attr(obj, *names):
 
 class MCPClient:
     def __init__(self, flaky_first_tool_call: bool = True,
-                 server_scripts: dict[str, Path] | None = None):
+                 server_scripts: dict[str, Path] | None = None,
+                 call_timeout_s: float | None = None):
         self._server_scripts = server_scripts or DEFAULT_SERVER_SCRIPTS
+        self._timeout = call_timeout_s or float(os.environ.get("MCP_CALL_TIMEOUT_S", "5"))
         self._stack: AsyncExitStack | None = None
         self.sessions: dict[str, ClientSession] = {}
         self._lock = asyncio.Lock()
@@ -76,8 +78,10 @@ class MCPClient:
         if self._flaky_pending and name == "get_monitoring_status":
             self._flaky_pending = False
             raise asyncio.TimeoutError("simulated transient timeout (Wave 9 demo)")
+        # 시간 제한이 없으면 멈춘 서버를 끝없이 기다리고 with_retry가 잡을 TimeoutError도 나지 않는다.
         async with self._lock:
-            result = await self.sessions[server].call_tool(name, arguments)
+            result = await asyncio.wait_for(
+                self.sessions[server].call_tool(name, arguments), self._timeout)
         return json.loads(result.content[0].text)
 
     @traceable(run_type="tool", name="mcp.list_resource_templates")
