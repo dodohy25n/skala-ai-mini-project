@@ -1,0 +1,24 @@
+{"id": "d01", "split": "dev", "query": "payments-service 결제 응답이 느려지고 CPU가 치솟았어요, 원인 확인해주세요", "expected_route": "incident", "expected_runbooks": {"payments-service": "cpu-spike"}}
+{"id": "d02", "split": "dev", "query": "cache-service 메모리 사용률이 계속 올라가고 있어요", "expected_route": "incident", "expected_runbooks": {"cache-service": "memory-leak"}}
+{"id": "d03", "split": "dev", "query": "log-service 디스크 공간이 부족하다는 알림이 왔어요", "expected_route": "incident", "expected_runbooks": {"log-service": "disk-full"}}
+{"id": "d04", "split": "dev", "query": "gateway-service에서 payments-service로 가는 요청이 타임아웃 나고 있어요", "expected_route": "incident", "expected_runbooks": {"gateway-service": "network-timeout", "payments-service": "cpu-spike"}}
+{"id": "d05", "split": "dev", "query": "web-01 CPU 급증, auth-service 커넥션 풀도 같이 확인해줘", "expected_route": "incident", "expected_runbooks": {"web-01": "cpu-spike", "auth-service": "high-latency"}}
+{"id": "d06", "split": "dev", "query": "payments-service랑 cache-service 둘 다 저하됐는데 공통 원인이 있는지 분석해줘", "expected_route": "incident", "expected_runbooks": {"payments-service": "cpu-spike", "cache-service": "memory-leak"}}
+{"id": "d07", "split": "dev", "query": "로그인 응답이 느려요, 원인 확인해주세요", "expected_route": "incident", "expected_runbooks": {"auth-service": "high-latency"}}
+{"id": "d08", "split": "dev", "query": "billing-service 응답이 느려요", "expected_route": "incident", "expected_runbooks": {}}
+{"id": "d09", "split": "dev", "query": "web-01 디스크가 꽉 찼다는 알림이 왔어요", "expected_route": "incident", "expected_runbooks": {"web-01": "disk-full"}}
+{"id": "d10", "split": "dev", "query": "auth-service p95 지연이 2초를 넘었어요", "expected_route": "incident", "expected_runbooks": {"auth-service": "high-latency"}}
+{"id": "d11", "split": "dev", "query": "gateway-service에 패킷 손실이 보여요", "expected_route": "incident", "expected_runbooks": {"gateway-service": "network-timeout"}}
+{"id": "d12", "split": "dev", "query": "안녕, 너는 누구야?", "expected_route": "chat", "expected_runbooks": {}}
+{"id": "t01", "split": "test", "query": "payments-service 인스턴스 하나가 느리게 응답해요", "expected_route": "incident", "expected_runbooks": {"payments-service": "cpu-spike"}}
+{"id": "t02", "split": "test", "query": "cache-service 힙이 거의 한계래요", "expected_route": "incident", "expected_runbooks": {"cache-service": "memory-leak"}}
+{"id": "t03", "split": "test", "query": "log-service /var/log 사용률이 95%예요", "expected_route": "incident", "expected_runbooks": {"log-service": "disk-full"}}
+{"id": "t04", "split": "test", "query": "gateway-service 업스트림 504가 계속 떠요", "expected_route": "incident", "expected_runbooks": {"gateway-service": "network-timeout"}}
+{"id": "t05", "split": "test", "query": "cache-service랑 log-service 같이 봐줘", "expected_route": "incident", "expected_runbooks": {"cache-service": "memory-leak", "log-service": "disk-full"}}
+{"id": "t06", "split": "test", "query": "auth-service 커넥션 풀이 90% 넘었어요", "expected_route": "incident", "expected_runbooks": {"auth-service": "high-latency"}}
+{"id": "t07", "split": "test", "query": "web-01 DB 연결이 안 돼요", "expected_route": "incident", "expected_runbooks": {"web-01": "db-down"}}
+{"id": "t08", "split": "test", "query": "web-01 응답이 느려졌어요", "expected_route": "incident", "expected_runbooks": {"web-01": "high-latency"}}
+{"id": "t09", "split": "test", "query": "billing-service가 죽은 것 같아요", "expected_route": "incident", "expected_runbooks": {}}
+{"id": "t10", "split": "test", "query": "web-01 서버 정상인지 확인해줘", "expected_route": "incident", "expected_runbooks": {}}
+{"id": "t11", "split": "test", "query": "web-01 크론 작업 시간대 설정 알려줘", "expected_route": "incident", "expected_runbooks": {}}
+{"id": "t12", "split": "test", "query": "제 이름은 민수입니다", "expected_route": "chat", "expected_runbooks": {}}
