@@ -1,0 +1,9 @@
+runbook index: 34 chunks, 6.1s, threshold 0.56
+=== cache-service 메모리 사용률이 계속 올라가고 있어요, 원인 진단해줘 | route=incident | 70.9s | asked=[['프로세스 재시작'], ['배포 롤백']] decision=reject
+events: [{'type': 'RunbookSelected', 'picks': [{'system': 'cache-service', 'incident_type': 'memory-leak', 'score': 0.67, 'basis': 'alerts'}], 'ms': 495.9}]
+final: 1) 메모리 사용률 추세 확인: 모니터링 상태에서 메모리 91.5% 사용 중, 6시간 이상 꾸준히 상승 중인 'memory usage climbing steadily over 6h' 알림 확인. 2) 힙 덤프 분석: 힙 한계 근접 상태에서 힙 덤프 또는 프로파일링 도구로 누수 객체 식별 및 메모리 누수 원인 파악. 3) 최근 배포 검토: 캐시 무제한 증가, 커넥션 미반환, 이벤트 리스너 중복 등록 등 메모리 누수 패턴이 최근 배포에 존재하는지 점검. ※ 운영자가 보류한 조치 문장 1개를 답변에서 뺐습니다.
+=== web-01 배포 담당자가 누구야? 장애 진단해줘 | route=incident | 28.2s | asked=[] decision=approve
+events: [{'type': 'RunbookSelected', 'picks': [], 'ms': 4298.9}, {'type': 'RunbookMiss', 'systems': ['web-01']}]
+final: 1) 배포 담당자: 수집된 정보에 따라 web-01의 배포 담당자가 명시되지 않음. 대응 매뉴얼이 존재하지 않으므로 담당자 확인이 필요함.  
+2) 장애 진단: 모니터링 상태는 healthy, CPU 40.7%, 메모리 51.3%, 알림 0건으로 이상 없음.  
+3) 패턴 분석: 특이 패턴 없음. 추가 조치 필요 시 담당자와 협의해야 함.
