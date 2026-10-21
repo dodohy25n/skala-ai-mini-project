@@ -38,6 +38,7 @@ from agent.fake_llm import FastLLM, QualityLLM
 from agent.graph import build_graph
 from agent.mcp_client import MCPClient
 from agent.session_store import SqliteSessionStore
+from agent.state import turn_input
 from agent.supervisor_v1 import run_v1
 
 CREATION_COUNT = 0   # Wave 1 — 프로세스 내 Agent 번들 생성 횟수 (항상 1이어야 정상)
@@ -174,8 +175,7 @@ def _config(thread_id: str) -> dict:
 
 
 def _graph_input(message: str, thread_id: str, history: list[dict]) -> dict:
-    return {"query": message, "thread_id": thread_id, "history": history,
-            "events": [], "cost_usd": 0.0}
+    return turn_input(message, thread_id, history)
 
 
 def _save_turn(thread_id: str, message: str, final: str) -> None:

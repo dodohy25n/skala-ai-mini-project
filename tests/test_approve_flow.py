@@ -80,3 +80,45 @@ def test_resume_does_not_repeat_tool_calls():
 
     before, after = asyncio.run(go())
     assert before == after
+
+
+def test_turn_input_resets_every_state_key():
+    from typing import get_type_hints
+
+    from agent.state import AgentState, turn_input
+    state = turn_input("q", "t", [])
+    assert set(state) == set(get_type_hints(AgentState))
+    assert state["approved_actions"] == [] and state["replan_rounds"] == 0
+    assert state["validation_feedback"] is None
+
+
+def test_same_thread_second_question_starts_clean():
+    from agent.state import turn_input
+    graph = graph_with()
+
+    async def go():
+        cfg = {"configurable": {"thread_id": "same"}, "recursion_limit": 40}
+        first = await graph.ainvoke(turn_input("cache-service 메모리 장애 진단해줘", "same", []), cfg)
+        first = await graph.ainvoke(Command(resume="approve"), cfg)
+        second = await graph.ainvoke(turn_input("log-service 디스크 장애 진단해줘", "same", []), cfg)
+        return first, second
+
+    first, second = asyncio.run(go())
+    assert "재시작" in first["final"]
+    assert "__interrupt__" in second
+    assert [a["action"] for a in second["__interrupt__"][0].value["actions"]] == ["파일 삭제"]
+    assert "cache-service" not in second["__interrupt__"][0].value["draft"]
+
+
+def test_without_reset_previous_turn_leaks_into_next():
+    """초기화 없이 같은 thread로 보내면 이전 턴의 승인과 수집 결과가 남는다(고치기 전 동작 기록)."""
+    graph = graph_with()
+
+    async def go():
+        cfg = {"configurable": {"thread_id": "leak"}, "recursion_limit": 40}
+        await graph.ainvoke(first_input("cache-service 메모리 장애 진단해줘", "leak"), cfg)
+        await graph.ainvoke(Command(resume="approve"), cfg)
+        return await graph.ainvoke(first_input("log-service 디스크 장애 진단해줘", "leak"), cfg)
+
+    second = asyncio.run(go())
+    assert "cache-service" in second.get("final", "") or "__interrupt__" not in second

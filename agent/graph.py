@@ -19,7 +19,6 @@ import json
 import time
 from functools import partial
 from pathlib import Path
-from typing import Any, TypedDict
 
 from langgraph.config import get_stream_writer
 from langgraph.graph import END, StateGraph
@@ -30,6 +29,7 @@ from .deps import SupervisorDeps
 from .retry import with_retry
 from .runbook_select import group_by_type, keyword_classify, select_runbooks
 from .safety import find_risky_actions, strip_actions
+from .state import AgentState
 
 
 def _load_known_systems() -> set[str]:
@@ -54,35 +54,6 @@ def _extract_system_name(query: str) -> str:
     고르고, 하나도 안 걸리면 가장 흔한 사례인 auth-service로 폴백."""
     matches = [(query.index(s), s) for s in KNOWN_SYSTEMS if s in query]
     return min(matches)[1] if matches else "auth-service"
-
-
-class AgentState(TypedDict, total=False):
-    query: str
-    thread_id: str
-    history: list[dict]
-    route: str
-    needs_analysis: bool
-    tasks: list[dict]
-    gate_removed: int
-    collected: list[dict]
-    replan_rounds: int
-    research_sufficient: bool
-    runbook_picks: dict
-    retry_count: int
-    parallel_elapsed: float
-    draft: str
-    validation_attempts: int
-    validation_feedback: str
-    approval: str
-    approved_actions: list[str]
-    rejected_actions: list[str]
-    approval_feedback: str
-    approval_rewrites: int
-    rewrite_requested: bool
-    final: str
-    last_prompt: str
-    cost_usd: float
-    events: list[dict]
 
 
 def _cost(state: AgentState, usage: dict) -> float:
