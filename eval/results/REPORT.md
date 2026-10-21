@@ -80,6 +80,33 @@ python eval/report.py before after-select after-rag after-final after-final-reje
 
 정량 측정은 하지 않았습니다. 로컬 CPU 추론이라 한 질문에 28~71초가 걸렸고, 같은 시간에 측정과 화면 확인이 함께 돌아 runbook 선택 시간도 0.5~4.3초로 흔들렸습니다.
 
+## LangSmith 추적으로 본 개선 전후
+
+같은 두 질문(d04 gateway 타임아웃, d09 web-01 디스크)을 개선 전 코드(`7ff9120`, `git worktree`로 꺼냄)와 현재 코드로 돌려
+각각 `w15-before`, `w15-after` 프로젝트에 추적을 남겼습니다. 조건은 위 측정과 같습니다(fake, 라우터 정답 고정, 승인 요청은 즉시 승인).
+
+```bash
+LANGCHAIN_TRACING_V2=true LANGCHAIN_PROJECT=w15-after python eval/run_bench.py --label trace --oracle-route --cases <d04, d09만 담은 파일>
+```
+
+| 장면 | 개선 전 | 개선 후 |
+| --- | --- | --- |
+| `replan_check_node` 출력 | gap task 하나, `target: cpu-spike` | `runbook_picks`: gateway-service → network-timeout, payments-service → cpu-spike |
+| `approve_node` | 없음 | 첫 추적에서 상태 `interrupted`, Interrupt 탭에 `ApprovalRequired` 초안과 조치 목록 |
+| 재개 | 없음 | 같은 thread의 두 번째 턴. 트리에 approve → finalize만 있고 MCP 호출이 없음 |
+| 한 질문의 실행 수 | 48 | 첫 추적 49 + 재개 6 |
+
+재개 추적에 MCP 호출이 없다는 것은 `test_resume_does_not_repeat_tool_calls`가 확인하는 성질을 실제 실행 기록으로 다시 보인 것입니다.
+개발용 14문항 전체도 `w15-ai-mini` 프로젝트에 남겼습니다(질문 14, 재개 10, 기동 시 `list_systems` 1, 합계 25).
+
+| 개선 전 `replan_check_node` | 개선 후 `replan_check_node` |
+| --- | --- |
+| ![](../../docs/images/07_langsmith_before_replan.jpg) | ![](../../docs/images/08_langsmith_after_replan.jpg) |
+
+| 승인 노드에서 멈춤 | 재개(같은 thread 두 번째 턴) | 추적 목록 |
+| --- | --- | --- |
+| ![](../../docs/images/09_langsmith_after_interrupt.jpg) | ![](../../docs/images/10_langsmith_after_resume.jpg) | ![](../../docs/images/11_langsmith_trace_list.jpg) |
+
 ## 단위 테스트
 
 ```bash
