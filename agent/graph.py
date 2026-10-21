@@ -23,11 +23,13 @@ from typing import Any, TypedDict
 
 from langgraph.config import get_stream_writer
 from langgraph.graph import END, StateGraph
+from langgraph.types import interrupt
 from langsmith import traceable
 
 from .deps import SupervisorDeps
 from .retry import with_retry
 from .runbook_select import group_by_type, keyword_classify, select_runbooks
+from .safety import find_risky_actions, strip_actions
 
 
 def _load_known_systems() -> set[str]:
@@ -71,6 +73,12 @@ class AgentState(TypedDict, total=False):
     draft: str
     validation_attempts: int
     validation_feedback: str
+    approval: str
+    approved_actions: list[str]
+    rejected_actions: list[str]
+    approval_feedback: str
+    approval_rewrites: int
+    rewrite_requested: bool
     final: str
     last_prompt: str
     cost_usd: float
@@ -270,10 +278,12 @@ async def write_node(state: AgentState, deps: SupervisorDeps) -> dict:
     될 때 프론트가 새 말풍선으로 끊어서 보여줄 수 있게 하기 위함(Wave 8 재작성 루프를
     그대로 노출)."""
     attempt = state.get("validation_attempts", 0) + 1
+    feedback = "\n".join(f for f in (state.get("validation_feedback"),
+                                      state.get("approval_feedback")) if f) or None
     writer = get_stream_writer()
     draft, usage = await deps.quality_llm.write(
         state["query"], state.get("collected", []),
-        attempt, state.get("validation_feedback"),
+        attempt, feedback,
         on_token=lambda piece: writer(
             {"type": "AnswerToken", "attempt": attempt, "delta": piece}))
     return {"draft": draft, "last_prompt": usage.get("prompt"),
@@ -299,6 +309,50 @@ async def validate_node(state: AgentState, deps: SupervisorDeps) -> dict:
             "events": state["events"] + [event]}
 
 
+@traceable(name="approve_node")
+async def approve_node(state: AgentState, deps: SupervisorDeps) -> dict:
+    """위험 조치가 든 초안은 운영자 결정을 받고 나서 내보낸다.
+
+    interrupt()로 실행을 멈추면 체크포인터가 State를 저장하고, 같은 thread_id로
+    Command(resume=결정)를 보내면 이 노드가 처음부터 다시 실행된다. 그래서 interrupt 앞에는
+    MCP·LLM 호출 없이 순수 함수만 둔다. 승인은 조치 "종류" 단위로 기억해 재작성본에 같은
+    종류가 다시 나와도 두 번 묻지 않는다."""
+    approved = set(state.get("approved_actions", []))
+    rejected = list(state.get("rejected_actions", []))
+    draft = strip_actions(state["draft"], rejected) if rejected else state["draft"]
+    found = find_risky_actions(draft)
+    pending = sorted({f["action"] for f in found} - approved)
+    events = list(state["events"])
+    if not pending:
+        events.append({"type": "ApprovalSkipped",
+                       "reason": "이미 승인된 조치" if found else "위험 조치 없음"})
+        return {"draft": draft, "approval": "approved" if found else "not_required",
+                "rewrite_requested": False, "events": events}
+
+    decision = interrupt({"type": "ApprovalRequired", "draft": draft,
+                          "actions": [f for f in found if f["action"] in pending]})
+
+    if decision == "approve":
+        approved |= set(pending)
+        events.append({"type": "ApprovalDecided", "decision": "approve", "actions": pending})
+        return {"draft": draft, "approval": "approved", "approved_actions": sorted(approved),
+                "rewrite_requested": False, "events": events}
+
+    rejected += [a for a in pending if a not in rejected]
+    if state.get("approval_rewrites", 0) < 1:
+        events.append({"type": "ApprovalDecided", "decision": "reject", "actions": pending,
+                       "next": "rewrite"})
+        feedback = (f"운영자가 다음 조치를 거절했습니다: {', '.join(rejected)}. "
+                    f"이 조치를 빼고 다른 절차로 다시 작성하세요.")
+        return {"draft": draft, "approval": "rejected", "rejected_actions": rejected,
+                "approval_feedback": feedback, "approval_rewrites": 1,
+                "rewrite_requested": True, "events": events}
+    events.append({"type": "ApprovalDecided", "decision": "reject", "actions": pending,
+                   "next": "strip"})
+    return {"draft": strip_actions(draft, rejected), "approval": "rejected",
+            "rejected_actions": rejected, "rewrite_requested": False, "events": events}
+
+
 @traceable(name="finalize_node")
 async def finalize_node(state: AgentState, deps: SupervisorDeps) -> dict:
     return {"final": state["draft"],
@@ -314,7 +368,11 @@ def _after_replan_check(state: AgentState) -> str:
 
 
 def _after_validate(state: AgentState) -> str:
-    return "finalize" if state.get("validation_feedback") is None else "write"
+    return "approve" if state.get("validation_feedback") is None else "write"
+
+
+def _after_approve(state: AgentState) -> str:
+    return "write" if state.get("rewrite_requested") else "finalize"
 
 
 def build_graph(deps: SupervisorDeps):
@@ -329,6 +387,7 @@ def build_graph(deps: SupervisorDeps):
     g.add_node("analysis", node(analysis_node))
     g.add_node("write", node(write_node))
     g.add_node("validate", node(validate_node))
+    g.add_node("approve", node(approve_node))
     g.add_node("finalize", node(finalize_node))
 
     g.set_entry_point("route")
@@ -343,6 +402,8 @@ def build_graph(deps: SupervisorDeps):
     g.add_edge("analysis", "write")
     g.add_edge("write", "validate")
     g.add_conditional_edges("validate", _after_validate,
+                            {"approve": "approve", "write": "write"})
+    g.add_conditional_edges("approve", _after_approve,
                             {"finalize": "finalize", "write": "write"})
     g.add_edge("finalize", END)
-    return g.compile()
+    return g.compile(checkpointer=deps.checkpointer)

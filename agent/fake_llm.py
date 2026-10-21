@@ -87,6 +87,15 @@ class FastLLM(FakeLLM):
         return reply, self._usage(query, reply)
 
 
+def _rejected_patterns(feedback: str | None) -> list[str]:
+    """운영자가 거절한 조치를 지시대로 빼고 쓰는 모델을 흉내 낸다(실모델은 프롬프트로 같은 지시를 받는다)."""
+    m = re.search(r"거절했습니다: (.+?)\. ", feedback or "")
+    if not m:
+        return []
+    from .safety import RISKY_ACTIONS
+    return [RISKY_ACTIONS[a] for a in m.group(1).split(", ") if a in RISKY_ACTIONS]
+
+
 class QualityLLM(FakeLLM):
     """최종 답변 작성 전담 (고품질·고비용)."""
 
@@ -107,6 +116,7 @@ class QualityLLM(FakeLLM):
         mon = [c for c in collected if c["source"] == "monitoring"]
         run = [c for c in collected if c["source"] == "runbook"]
         miss = [c for c in collected if c["source"] == "runbook_miss"]
+        avoid = _rejected_patterns(feedback)
         summary = " · ".join(
             f"{c['data']['system_name']} 상태={c['data']['status']}, "
             f"CPU {c['data']['cpu_percent']}% (알림 {len(c['data']['alerts'])}건)"
@@ -118,6 +128,9 @@ class QualityLLM(FakeLLM):
             title = body_lines[0].lstrip("# ")
             steps = [m.group(1) for l in body_lines[1:]
                      if (m := re.match(r"^\d+\.\s+(.*)", l))]
+            if avoid:
+                steps = steps[:1] + [st for st in steps[1:]
+                                     if not any(re.search(p, st) for p in avoid)]
             advice = " ".join(steps[1:3]) or "표준 절차를 따라 조치하세요."
             target = ", ".join(c.get("systems", []))
             prefix = f"{target}: " if target else ""

@@ -234,7 +234,7 @@ class OpenAIQualityLLM(OpenAILLM):
                 facts.append(f"- 패턴 분석: {c['data'].strip()}")
         user = f"## 사용자 요청\n{query}\n\n## 수집된 사실\n" + "\n".join(facts)
         if feedback:
-            user += f"\n\n## 이전 초안에 대한 검증 반려 사유 (반드시 반영)\n{feedback}"
+            user += f"\n\n## 이전 초안에 대한 반려 사유 (반드시 반영)\n{feedback}"
         content, usage = self._chat(system, user)
         usage["prompt"] = f"[SYSTEM]\n{system}\n\n[USER]\n{user}"
         if on_token is not None:

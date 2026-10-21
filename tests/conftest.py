@@ -1,5 +1,8 @@
 import json
+import os
 from pathlib import Path
+
+os.environ["LANGCHAIN_TRACING_V2"] = "false"
 
 import pytest
 

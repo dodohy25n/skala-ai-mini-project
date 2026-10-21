@@ -75,6 +75,19 @@
     color: white; font-size: 14px; cursor: pointer;
   }
   button:disabled { background: #3a3a52; cursor: default; }
+  .bubble.draft { opacity: .55; border: 1px dashed #6a6a8a; }
+  .draft-label { font-size: 11px; color: #c9a96e; margin-bottom: 4px; }
+  .approval {
+    max-width: 70%; background: #2b2533; border: 1px solid #c9a96e; border-radius: 12px;
+    padding: 12px 14px; font-size: 13px;
+  }
+  .approval-title { font-weight: 600; color: #f0cf8f; margin-bottom: 6px; }
+  .approval ul { margin: 0 0 10px; padding-left: 18px; }
+  .approval li { margin-bottom: 4px; }
+  .approval-buttons { display: flex; gap: 8px; }
+  .approval-buttons button { padding: 7px 16px; font-size: 13px; }
+  .approval-buttons button.reject { background: #8a3b4a; }
+  .approval-result { color: #9a9ac0; }
 </style>
 </head>
 <body>
@@ -91,7 +104,21 @@
       </div>
 
       <div v-else-if="item.kind === 'agent'" class="row agent">
-        <div class="bubble">{{ item.text }}</div>
+        <div class="bubble" :class="{ draft: item.draft }">
+          <div v-if="item.draft" class="draft-label">초안 · 운영자 승인 전</div>{{ item.text }}
+        </div>
+      </div>
+
+      <div v-else-if="item.kind === 'approval'" class="approval">
+        <div class="approval-title">운영자 승인이 필요한 조치가 있습니다</div>
+        <ul>
+          <li v-for="(a, i) in item.actions" :key="i"><b>{{ a.action }}</b> — {{ a.step }}</li>
+        </ul>
+        <div v-if="!item.decided" class="approval-buttons">
+          <button @click="decide(item, 'approve')">승인</button>
+          <button class="reject" @click="decide(item, 'reject')">거절</button>
+        </div>
+        <div v-else class="approval-result">{{ item.decided === 'approve' ? '승인했습니다' : '거절했습니다' }}</div>
       </div>
 
       <details v-else-if="item.kind === 'prompt'" class="prompt-box">
@@ -106,7 +133,7 @@
       autocomplete="off"
       placeholder="예: auth-service 로그인 응답이 느려졌어요. 원인 확인해주세요"
     />
-    <button type="submit" :disabled="sending">보내기</button>
+    <button type="submit" :disabled="sending || approvalPending">보내기</button>
   </form>
 </div>
 
@@ -126,7 +153,13 @@ const STEP_LABELS = {
   RunbookMiss: e => `맞는 대응 매뉴얼 없음: ${e.systems.join(', ')}`,
   ReplanCheck: e => e.is_sufficient ? null : `정보 부족 → 장애유형 "${e.target}"로 추가 조사`,
   DraftWritten: e => `답변 초안 작성 (시도 ${e.attempt})`,
-  Validation: e => e.verdict === '합격' ? '검수 통과' : '검수 반려 → 다시 작성',
+  Validation: e => e.verdict === '합격' ? '검수 통과'
+      : e.verdict.startsWith('합격') ? '검수 시도 상한 도달 → 통과 처리' : '검수 반려 → 다시 작성',
+  ApprovalRequired: e => `운영자 승인 대기: ${e.actions.map(a => a.action).join(', ')}`,
+  ApprovalDecided: e => e.decision === 'approve'
+      ? `승인됨: ${e.actions.join(', ')}`
+      : `거절됨: ${e.actions.join(', ')} → ${e.next === 'rewrite' ? '해당 조치를 빼고 다시 작성' : '해당 문장 제거'}`,
+  ApprovalSkipped: e => e.reason === '이미 승인된 조치' ? '이미 승인한 조치만 있어 바로 진행' : null,
   Finalize: () => '최종 답변 완성',
 };
 
@@ -141,7 +174,9 @@ createApp({
     let nextId = 0;
 
     fetch('/health').then(r => r.json()).then(h => {
-      backendLabel.value = `${h.llm_backend} 실모델(${h.fast_llm}/${h.quality_llm}) · all_total_vue`;
+      const kind = h.llm_backend === 'fake' ? '결정론 모델' : '실모델';
+      const rag = h.runbook_index ? `runbook 검색 ${h.runbook_index.chunks}청크` : '키워드 규칙';
+      backendLabel.value = `${h.llm_backend} ${kind}(${h.fast_llm}/${h.quality_llm}) · ${rag}`;
     }).catch(() => {});
 
     async function scrollToBottom() {
@@ -149,32 +184,16 @@ createApp({
       if (logEl.value) logEl.value.scrollTop = logEl.value.scrollHeight;
     }
 
-    function onSubmit() {
-      const text = input.value.trim();
-      if (!text) return;
+    const approvalPending = ref(false);
 
-      log.value.push({ id: nextId++, kind: 'user', text });
-      input.value = '';
-      sending.value = true;
-      scrollToBottom();
-
-      const stepsItem = reactive({ id: nextId++, kind: 'steps', steps: [] });
-      log.value.push(stepsItem);
-      scrollToBottom();
-
-      const url = `/chat/stream?message=${encodeURIComponent(text)}&thread_id=${encodeURIComponent(thread)}`;
-      const es = new EventSource(url);
+    function makeHandler(stepsItem) {
       let streamItem = null;
       let streamAttempt = null;   // write_node 재작성(attempt 증가) 시 새 말풍선으로 끊는다
 
-      es.onmessage = (event) => {
-        if (event.data === '[DONE]') { es.close(); sending.value = false; return; }
-        let e;
-        try { e = JSON.parse(event.data); } catch { return; }
-
+      return function handle(e) {
         if (e.type === 'AnswerToken') {
           if (!streamItem || streamAttempt !== e.attempt) {
-            streamItem = reactive({ id: nextId++, kind: 'agent', text: '' });
+            streamItem = reactive({ id: nextId++, kind: 'agent', text: '', draft: false });
             log.value.push(streamItem);
             streamAttempt = e.attempt;
           }
@@ -183,9 +202,26 @@ createApp({
           return;
         }
 
+        if (e.type === 'ApprovalRequired') {
+          if (streamItem) streamItem.draft = true;   // 승인 전 초안은 최종 답과 구분해 흐리게 둔다
+          streamItem = null;
+          streamAttempt = null;
+          stepsItem.steps.push(STEP_LABELS.ApprovalRequired(e));
+          log.value.push(reactive({ id: nextId++, kind: 'approval', actions: e.actions, decided: null }));
+          approvalPending.value = true;
+          scrollToBottom();
+          return;
+        }
+
+        if (e.type === 'Error') {
+          log.value.push({ id: nextId++, kind: 'agent', text: e.message });
+          scrollToBottom();
+          return;
+        }
+
         if (e.type === 'FinalAnswer') {
           if (!streamItem) {
-            streamItem = reactive({ id: nextId++, kind: 'agent', text: '' });
+            streamItem = reactive({ id: nextId++, kind: 'agent', text: '', draft: false });
             log.value.push(streamItem);
           }
           streamItem.text = e.reply;   // 토큰 합산 결과와 서버의 최종 텍스트를 일치시킨다
@@ -203,11 +239,74 @@ createApp({
         stepsItem.steps.push(label);
         scrollToBottom();
       };
+    }
+
+    function newSteps() {
+      const stepsItem = reactive({ id: nextId++, kind: 'steps', steps: [] });
+      log.value.push(stepsItem);
+      scrollToBottom();
+      return stepsItem;
+    }
+
+    function onSubmit() {
+      const text = input.value.trim();
+      if (!text || approvalPending.value) return;
+
+      log.value.push({ id: nextId++, kind: 'user', text });
+      input.value = '';
+      sending.value = true;
+      scrollToBottom();
+
+      const handle = makeHandler(newSteps());
+      const url = `/chat/stream?message=${encodeURIComponent(text)}&thread_id=${encodeURIComponent(thread)}`;
+      const es = new EventSource(url);
+
+      es.onmessage = (event) => {
+        if (event.data === '[DONE]') { es.close(); sending.value = false; return; }
+        let e;
+        try { e = JSON.parse(event.data); } catch { return; }
+        handle(e);
+      };
 
       es.onerror = () => { es.close(); sending.value = false; };
     }
 
-    return { backendLabel, log, input, sending, logEl, onSubmit };
+    // 승인은 상태를 바꾸는 요청이라 EventSource(GET) 대신 fetch POST로 보내고,
+    // 응답 본문을 직접 읽어 \n\n 경계로 SSE 이벤트를 자른다.
+    async function decide(item, decision) {
+      item.decided = decision;
+      sending.value = true;
+      const handle = makeHandler(newSteps());
+      try {
+        const res = await fetch('/chat/resume/stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ thread_id: thread, decision }),
+        });
+        approvalPending.value = false;
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          let cut;
+          while ((cut = buffer.indexOf('\n\n')) >= 0) {
+            const block = buffer.slice(0, cut);
+            buffer = buffer.slice(cut + 2);
+            if (!block.startsWith('data: ')) continue;
+            const data = block.slice(6);
+            if (data === '[DONE]') continue;
+            try { handle(JSON.parse(data)); } catch { /* 깨진 조각은 건너뛴다 */ }
+          }
+        }
+      } finally {
+        sending.value = false;
+      }
+    }
+
+    return { backendLabel, log, input, sending, approvalPending, logEl, onSubmit, decide };
   },
 }).mount('#app');
 </script>

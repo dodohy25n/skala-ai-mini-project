@@ -51,6 +51,29 @@ async def proxy_chat(req: Request):
     return JSONResponse(r.json(), status_code=r.status_code)
 
 
+@app.post("/chat/resume")
+async def proxy_resume(req: Request):
+    body = await req.body()
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        r = await client.post(f"{BACKEND}/chat/resume", content=body,
+                              headers={"content-type": "application/json"})
+    return JSONResponse(r.json(), status_code=r.status_code)
+
+
+@app.post("/chat/resume/stream")
+async def proxy_resume_stream(req: Request):
+    body = await req.body()
+
+    async def relay():
+        async with httpx.AsyncClient(timeout=None) as client:
+            async with client.stream("POST", f"{BACKEND}/chat/resume/stream", content=body,
+                                     headers={"content-type": "application/json"}) as upstream:
+                async for chunk in upstream.aiter_bytes():
+                    yield chunk
+
+    return StreamingResponse(relay(), media_type="text/event-stream")
+
+
 @app.get("/chat/stream")
 async def proxy_stream(message: str, thread_id: str = "web-demo"):
     async def relay():

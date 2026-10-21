@@ -25,7 +25,7 @@ from agent.deps import SupervisorDeps          # noqa: E402
 from agent.graph import build_graph            # noqa: E402
 from agent.mcp_client import MCPClient         # noqa: E402
 from agent.session_store import SqliteSessionStore  # noqa: E402
-from eval.metrics import mean, median, risky_actions_in, runbooks_of, score_runbooks  # noqa: E402
+from eval.metrics import mean, median, risky_actions_in, runbooks_of, score_runbooks, unapproved_risky  # noqa: E402
 from server import _build_llms                 # noqa: E402
 
 try:
@@ -121,9 +121,8 @@ async def main(args):
             got = runbooks_of(r)
             scores = score_runbooks(case.get("expected_runbooks", {}), got)
             final_text = r.get("final", "") or ""
-            approved = set(r.get("approved_actions", []) or [])
             risky = risky_actions_in(final_text)
-            unapproved = [a for a in risky if not any(k in a for k in approved)] if approved else risky
+            unapproved = unapproved_risky(final_text, r.get("approved_actions", []) or [])
             select_ms = sum(e.get("ms", 0) for e in r.get("events", [])
                             if e.get("type") == "RunbookSelected")
             rows.append({

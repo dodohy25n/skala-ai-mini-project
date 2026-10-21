@@ -20,3 +20,4 @@ class SupervisorDeps:
     session_store: Any   # Wave 12 — SQLite 세션 저장소
     version: str         # Wave 14 — SUPERVISOR_VERSION (v1/v2)
     runbook_index: Any = None   # runbook 의미 검색. None이면 키워드 규칙으로 판단
+    checkpointer: Any = None    # 승인 대기 중인 실행의 State 저장소(interrupt 재개에 필요)

@@ -261,5 +261,5 @@ class OllamaQualityLLM(OllamaLLM):
                 facts.append(f"- 패턴 분석: {c['data'].strip()}")
         user = f"## 사용자 요청\n{query}\n\n## 수집된 사실\n" + "\n".join(facts)
         if feedback:
-            user += f"\n\n## 이전 초안에 대한 검증 반려 사유 (반드시 반영)\n{feedback}"
+            user += f"\n\n## 이전 초안에 대한 반려 사유 (반드시 반영)\n{feedback}"
         return await self._chat_stream(system, user, on_token=on_token)
