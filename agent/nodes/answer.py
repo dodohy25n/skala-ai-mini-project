@@ -75,7 +75,7 @@ async def approve_node(state: AgentState, deps: SupervisorDeps) -> dict:
 
     interrupt()로 실행을 멈추면 체크포인터가 State를 저장하고, 같은 thread_id로
     Command(resume=결정)를 보내면 이 노드가 처음부터 다시 실행된다. 그래서 interrupt 앞에는
-    MCP·LLM 호출 없이 순수 함수만 둔다. 승인은 조치 "종류" 단위로 기억해 재작성본에 같은
+    MCP나 LLM 호출 없이 순수 함수만 둔다. 승인은 조치 "종류" 단위로 기억해 재작성본에 같은
     종류가 다시 나와도 두 번 묻지 않는다."""
     approved = set(state.get("approved_actions", []))
     rejected = list(state.get("rejected_actions", []))

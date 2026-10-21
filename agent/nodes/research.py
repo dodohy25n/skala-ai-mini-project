@@ -87,7 +87,7 @@ def _classifier(deps: SupervisorDeps):
 async def replan_check_node(state: AgentState, deps: SupervisorDeps) -> dict:
     """Wave 7 — 1차 수집 결과 평가. runbook이 없으면 시스템별로 유형을 골라 gap task를 추가해 재조사.
 
-    유형 판단은 LLM에게 다시 묻지 않고 코드가 내린다(gate·validate와 같은 원칙).
+    유형 판단은 LLM에게 다시 묻지 않고 코드가 내린다(gate, validate와 같은 원칙).
     분기는 진행 로그의 마지막 줄이 아니라 research_sufficient 필드로 한다."""
     collected = state.get("collected", [])
     rounds = state.get("replan_rounds", 0)

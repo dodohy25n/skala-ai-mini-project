@@ -105,7 +105,7 @@
 
       <div v-else-if="item.kind === 'agent'" class="row agent">
         <div class="bubble" :class="{ draft: item.draft }">
-          <div v-if="item.draft" class="draft-label">초안 · 운영자 승인 전</div>{{ item.text }}
+          <div v-if="item.draft" class="draft-label">초안 (운영자 승인 전)</div>{{ item.text }}
         </div>
       </div>
 
@@ -176,7 +176,7 @@ createApp({
     fetch('/health').then(r => r.json()).then(h => {
       const kind = h.llm_backend === 'fake' ? '결정론 모델' : '실모델';
       const rag = h.runbook_index ? `runbook 검색 ${h.runbook_index.chunks}청크` : '키워드 규칙';
-      backendLabel.value = `${h.llm_backend} ${kind}(${h.fast_llm}/${h.quality_llm}) · ${rag}`;
+      backendLabel.value = `${h.llm_backend} ${kind}(${h.fast_llm}/${h.quality_llm}), ${rag}`;
     }).catch(() => {});
 
     async function scrollToBottom() {
