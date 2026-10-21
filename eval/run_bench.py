@@ -167,7 +167,7 @@ def _make_deps(kwargs):
 def print_summary(rows, label, startup_s, out):
     inc = [r for r in rows if r["expected_route"] == "incident"]
     ran = [r for r in inc if r["route"] == "incident"]
-    print(f"[{label}] rows={len(rows)} incident={len(inc)} startup={startup_s}s -> {out.relative_to(ROOT)}")
+    print(f"[{label}] rows={len(rows)} incident={len(inc)} startup={startup_s}s -> {out}")
     print(f"  route_acc        {mean([r['route_ok'] for r in rows])}")
     print(f"  runbook_exact    {mean([r['exact'] for r in inc])}")
     print(f"  runbook_recall   {mean([r['recall'] for r in inc])}")

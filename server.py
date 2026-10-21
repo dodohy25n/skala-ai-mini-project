@@ -70,6 +70,26 @@ def _build_llms():
     return backend, fast, quality
 
 
+def _build_runbook_index():
+    """RUNBOOK_INDEX=off이거나 임베딩 모델을 불러오지 못하면 None을 돌려 키워드 규칙으로 동작하게 한다."""
+    if os.environ.get("RUNBOOK_INDEX", "on") == "off":
+        return None
+    try:
+        from agent.runbook_index import RunbookIndex
+        index = RunbookIndex()
+        print(f"runbook index: {index.chunk_count} chunks, {index.build_s}s, threshold {index.threshold}")
+        return index
+    except Exception as e:
+        print(f"runbook index disabled ({type(e).__name__}: {e}) — keyword rules in use")
+        return None
+
+
+def _build_deps(**kwargs) -> SupervisorDeps:
+    """서버와 측정 스크립트가 같은 방식으로 의존성을 조립하도록 한곳에 둔다."""
+    kwargs.setdefault("runbook_index", _build_runbook_index())
+    return SupervisorDeps(**kwargs)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global CREATION_COUNT
@@ -78,7 +98,7 @@ async def lifespan(app: FastAPI):
     await mcp.start()   # Wave 2 — MCP subprocess는 서버 수명 동안 딱 1개
     backend, fast_llm, quality_llm = _build_llms()
     app.state.llm_backend = backend
-    deps = SupervisorDeps(
+    deps = _build_deps(
         fast_llm=fast_llm,
         quality_llm=quality_llm,
         mcp=mcp,
@@ -108,7 +128,14 @@ async def health():
             "supervisor_version": app.state.deps.version,
             "llm_backend": app.state.llm_backend,
             "fast_llm": app.state.deps.fast_llm.name,
-            "quality_llm": app.state.deps.quality_llm.name}
+            "quality_llm": app.state.deps.quality_llm.name,
+            "runbook_index": _index_info(app.state.deps.runbook_index)}
+
+
+def _index_info(index) -> dict | None:
+    if index is None:
+        return None
+    return {"chunks": index.chunk_count, "build_s": index.build_s, "threshold": index.threshold}
 
 
 @app.get("/version")

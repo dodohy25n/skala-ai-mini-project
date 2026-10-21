@@ -10,6 +10,8 @@
 {"id": "d10", "split": "dev", "query": "auth-service p95 지연이 2초를 넘었어요", "expected_route": "incident", "expected_runbooks": {"auth-service": "high-latency"}}
 {"id": "d11", "split": "dev", "query": "gateway-service에 패킷 손실이 보여요", "expected_route": "incident", "expected_runbooks": {"gateway-service": "network-timeout"}}
 {"id": "d12", "split": "dev", "query": "안녕, 너는 누구야?", "expected_route": "chat", "expected_runbooks": {}}
+{"id": "d13", "split": "dev", "query": "web-01 오늘 점검 일정 있어?", "expected_route": "incident", "expected_runbooks": {}}
+{"id": "d14", "split": "dev", "query": "web-01 배포 담당자가 누구야?", "expected_route": "incident", "expected_runbooks": {}}
 {"id": "t01", "split": "test", "query": "payments-service 인스턴스 하나가 느리게 응답해요", "expected_route": "incident", "expected_runbooks": {"payments-service": "cpu-spike"}}
 {"id": "t02", "split": "test", "query": "cache-service 힙이 거의 한계래요", "expected_route": "incident", "expected_runbooks": {"cache-service": "memory-leak"}}
 {"id": "t03", "split": "test", "query": "log-service /var/log 사용률이 95%예요", "expected_route": "incident", "expected_runbooks": {"log-service": "disk-full"}}
