@@ -120,6 +120,10 @@ const STEP_LABELS = {
   TaskCompleted: e => (e.source === 'monitoring'
       ? `모니터링 지표 확인 (시스템: ${e.target})`
       : `대응 매뉴얼(runbook) 조회 (장애유형: ${e.target})`) + (e.retries ? ' (재시도 성공)' : ''),
+  RunbookSelected: e => e.picks?.length
+      ? `대응 매뉴얼 선택: ${e.picks.map(p => `${p.system} → ${p.incident_type}`).join(', ')}`
+      : null,
+  RunbookMiss: e => `맞는 대응 매뉴얼 없음: ${e.systems.join(', ')}`,
   ReplanCheck: e => e.is_sufficient ? null : `정보 부족 → 장애유형 "${e.target}"로 추가 조사`,
   DraftWritten: e => `답변 초안 작성 (시도 ${e.attempt})`,
   Validation: e => e.verdict === '합격' ? '검수 통과' : '검수 반려 → 다시 작성',

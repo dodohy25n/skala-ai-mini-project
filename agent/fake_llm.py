@@ -106,19 +106,28 @@ class QualityLLM(FakeLLM):
 
         mon = [c for c in collected if c["source"] == "monitoring"]
         run = [c for c in collected if c["source"] == "runbook"]
+        miss = [c for c in collected if c["source"] == "runbook_miss"]
         summary = " · ".join(
             f"{c['data']['system_name']} 상태={c['data']['status']}, "
             f"CPU {c['data']['cpu_percent']}% (알림 {len(c['data']['alerts'])}건)"
             for c in mon)
         lines = [f"'{query}' 진단 결과:", f"1) 모니터링: {summary}"]
-        if run:
-            body_lines = [l.strip() for l in run[0]["data"].strip().splitlines() if l.strip()]
+        n = 2
+        for c in run:
+            body_lines = [l.strip() for l in c["data"].strip().splitlines() if l.strip()]
             title = body_lines[0].lstrip("# ")
             steps = [m.group(1) for l in body_lines[1:]
                      if (m := re.match(r"^\d+\.\s+(.*)", l))]
             advice = " ".join(steps[1:3]) or "표준 절차를 따라 조치하세요."
-            lines.append(f"2) 표준 절차: '{title}'에 따라 {advice}")
-        lines.append("3) 정상화 확인 후 원인 분석과 재발 방지 대책을 문서화하세요.")
+            target = ", ".join(c.get("systems", []))
+            prefix = f"{target}: " if target else ""
+            lines.append(f"{n}) {prefix}'{title}'에 따라 {advice}")
+            n += 1
+        for c in miss:
+            names = ", ".join(m["system"] for m in c["data"]["systems"])
+            lines.append(f"{n}) {names}: 맞는 대응 매뉴얼을 찾지 못했습니다. 담당자 확인이 필요합니다.")
+            n += 1
+        lines.append(f"{n}) 정상화 확인 후 원인 분석과 재발 방지 대책을 문서화하세요.")
         draft = " ".join(lines)
         if on_token is not None:
             on_token(draft)

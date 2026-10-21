@@ -27,6 +27,7 @@ from langsmith import traceable
 
 from .deps import SupervisorDeps
 from .retry import with_retry
+from .runbook_select import group_by_type, keyword_classify, select_runbooks
 
 
 def _load_known_systems() -> set[str]:
@@ -63,6 +64,8 @@ class AgentState(TypedDict, total=False):
     gate_removed: int
     collected: list[dict]
     replan_rounds: int
+    research_sufficient: bool
+    runbook_picks: dict
     retry_count: int
     parallel_elapsed: float
     draft: str
@@ -184,7 +187,8 @@ async def research_node(state: AgentState, deps: SupervisorDeps) -> dict:
     events = list(state["events"])
     for r in results:
         new_tasks[r["idx"]]["status"] = "done"
-        collected.append({"source": r["source"], "data": r["data"]})
+        collected.append({"source": r["source"], "data": r["data"],
+                          "systems": new_tasks[r["idx"]].get("systems", [])})
         retry_total += r["retries"]
         events.append({"type": "TaskCompleted", "id": new_tasks[r["idx"]]["id"],
                        "source": r["source"], "target": new_tasks[r["idx"]]["target"],
@@ -193,48 +197,48 @@ async def research_node(state: AgentState, deps: SupervisorDeps) -> dict:
             "parallel_elapsed": elapsed, "events": events}
 
 
-# 수집된 모니터링 결과(상태·알림 문구)를 보고 어떤 runbook이 맞는지 고른다. LLM에게
-# 다시 묻는 대신 코드 레벨 규칙으로 판단한다 — gate(Wave 6)·replan(Wave 7)과 같은 설계
-# 원칙: 모델의 판단을 그대로 믿지 않고, 실측 데이터로 검증 가능한 결정은 코드가 내린다.
-_INCIDENT_TYPE_RULES = [
-    ("latency", "high-latency"),
-    ("pool", "high-latency"),
-    ("cpu", "cpu-spike"),
-    ("memory", "memory-leak"),
-    ("heap", "memory-leak"),
-    ("timeout", "network-timeout"),
-    ("network", "network-timeout"),
-    ("disk", "disk-full"),
-    ("down", "db-down"),
-]
-
-
-def _classify_incident_type(collected: list[dict]) -> str:
-    text = " ".join(
-        f"{c['data'].get('status', '')} " + " ".join(c["data"].get("alerts", []))
-        for c in collected if c.get("source") == "monitoring"
-    ).lower()
-    for keyword, incident_type in _INCIDENT_TYPE_RULES:
-        if keyword in text:
-            return incident_type
-    return "db-down"   # 매칭되는 증상이 없으면 가장 일반적인 장애 대응 절차로 폴백
+def _classifier(deps: SupervisorDeps):
+    index = getattr(deps, "runbook_index", None)
+    return index.classify if index is not None else keyword_classify
 
 
 @traceable(name="replan_check_node")
 async def replan_check_node(state: AgentState, deps: SupervisorDeps) -> dict:
-    """Wave 7 — 1차 수집 결과 평가. runbook이 없으면 gap task만 추가해 재조사."""
-    has_runbook = any(c["source"] == "runbook" for c in state.get("collected", []))
+    """Wave 7 — 1차 수집 결과 평가. runbook이 없으면 시스템별로 유형을 골라 gap task를 추가해 재조사.
+
+    유형 판단은 LLM에게 다시 묻지 않고 코드가 내린다(gate·validate와 같은 원칙).
+    분기는 진행 로그의 마지막 줄이 아니라 research_sufficient 필드로 한다."""
+    collected = state.get("collected", [])
     rounds = state.get("replan_rounds", 0)
+    events = list(state["events"])
+    has_runbook = any(c["source"] == "runbook" for c in collected)
     if has_runbook or rounds >= 1:
-        verdict = {"type": "ReplanCheck", "round": rounds, "is_sufficient": True}
-        return {"events": state["events"] + [verdict]}
-    incident_type = _classify_incident_type(state.get("collected", []))
-    gap_task = {"id": "task-gap-runbook", "agent": "research", "kind": "runbook",
-                "target": incident_type, "status": "pending"}
-    verdict = {"type": "ReplanCheck", "round": rounds, "is_sufficient": False,
-               "gap_task": gap_task["id"], "target": incident_type}
-    return {"tasks": state["tasks"] + [gap_task], "replan_rounds": rounds + 1,
-            "events": state["events"] + [verdict]}
+        events.append({"type": "ReplanCheck", "round": rounds, "is_sufficient": True})
+        return {"research_sufficient": True, "events": events}
+
+    started = time.perf_counter()
+    picks, misses = select_runbooks(state["query"], collected, _classifier(deps))
+    events.append({"type": "RunbookSelected", "picks": picks,
+                   "ms": round((time.perf_counter() - started) * 1000, 1)})
+    if misses:
+        collected = collected + [{"source": "runbook_miss", "data": {"systems": misses}}]
+        events.append({"type": "RunbookMiss", "systems": [m["system"] for m in misses]})
+
+    by_type = group_by_type(picks)
+    picked = {p["system"]: p["incident_type"] for p in picks}
+    if not by_type:
+        events.append({"type": "ReplanCheck", "round": rounds, "is_sufficient": True})
+        return {"collected": collected, "runbook_picks": picked,
+                "research_sufficient": True, "events": events}
+
+    gap_tasks = [{"id": f"task-gap-runbook-{i}", "agent": "research", "kind": "runbook",
+                  "target": incident_type, "systems": systems, "status": "pending"}
+                 for i, (incident_type, systems) in enumerate(by_type.items())]
+    events.append({"type": "ReplanCheck", "round": rounds, "is_sufficient": False,
+                   "gap_tasks": [t["id"] for t in gap_tasks], "target": ", ".join(by_type)})
+    return {"tasks": state["tasks"] + gap_tasks, "collected": collected,
+            "replan_rounds": rounds + 1, "runbook_picks": picked,
+            "research_sufficient": False, "events": events}
 
 
 @traceable(name="analysis_node")
@@ -306,8 +310,7 @@ def _after_route(state: AgentState) -> str:
 
 
 def _after_replan_check(state: AgentState) -> str:
-    last = state["events"][-1]
-    return "analysis" if last.get("is_sufficient") else "research"
+    return "analysis" if state.get("research_sufficient") else "research"
 
 
 def _after_validate(state: AgentState) -> str:
