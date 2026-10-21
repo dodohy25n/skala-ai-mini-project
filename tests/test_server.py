@@ -39,6 +39,12 @@ def test_chat_returns_approval_required_then_resume_finishes(client):
     assert "재시작" in done["reply"]
 
 
+def test_health_reports_systems_from_mcp(client):
+    h = client.get("/health").json()
+    assert h["systems"] == {"count": 6, "source": "mcp"}
+    assert h["runbook_index"] is None
+
+
 def test_resume_without_pending_run_is_409(client):
     r = client.post("/chat/resume", json={"thread_id": "nobody", "decision": "approve"})
     assert r.status_code == 409

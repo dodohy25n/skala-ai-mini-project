@@ -104,6 +104,11 @@ async def main(args):
     oracle = OracleRouter(fast) if args.oracle_route else None
     mcp = MCPClient()
     await mcp.start()
+    try:
+        from agent.systems import refresh_from_mcp
+        await refresh_from_mcp(mcp)
+    except ImportError:
+        pass
     deps_kwargs = dict(fast_llm=oracle or fast, quality_llm=quality, mcp=mcp,
                        session_store=SqliteSessionStore(":memory:"), version="v2")
     deps = _make_deps(deps_kwargs)

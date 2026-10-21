@@ -23,6 +23,8 @@ class FakeMCP:
 
     async def call_tool(self, name, arguments, server="ops"):
         self.calls["call_tool"] += 1
+        if name == "list_systems":
+            return {"systems": sorted(MONITORING)}
         system = arguments["system_name"]
         if system in self.broken:
             raise ValueError("tool failed")

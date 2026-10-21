@@ -57,6 +57,13 @@ def get_monitoring_status(system_name: str) -> SystemStatus:
     )
 
 
+@mcp.tool()
+def list_systems() -> dict:
+    """모니터링 대상 시스템 이름 목록을 반환합니다. 에이전트는 기동할 때 이 목록을 받아 씁니다."""
+    monitoring_data = json.loads((DATA_DIR / "monitoring.json").read_text())
+    return {"systems": sorted(monitoring_data)}
+
+
 @mcp.resource("runbook://incident-response/{incident_type}")
 def get_incident_runbook(incident_type: str) -> str:
     """특정 incident 유형의 runbook(정적 문서)을 반환합니다."""

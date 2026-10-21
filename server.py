@@ -39,6 +39,7 @@ from agent.graph import build_graph
 from agent.mcp_client import MCPClient
 from agent.session_store import SqliteSessionStore
 from agent.state import turn_input
+from agent.systems import KNOWN_SYSTEMS, refresh_from_mcp
 from agent.supervisor_v1 import run_v1
 
 CREATION_COUNT = 0   # Wave 1 — 프로세스 내 Agent 번들 생성 횟수 (항상 1이어야 정상)
@@ -101,6 +102,7 @@ async def lifespan(app: FastAPI):
     CREATION_COUNT += 1
     mcp = MCPClient()
     await mcp.start()   # Wave 2 — MCP subprocess는 서버 수명 동안 딱 1개
+    app.state.systems_source = await refresh_from_mcp(mcp)
     backend, fast_llm, quality_llm = _build_llms()
     app.state.llm_backend = backend
     deps = _build_deps(
@@ -134,7 +136,8 @@ async def health():
             "llm_backend": app.state.llm_backend,
             "fast_llm": app.state.deps.fast_llm.name,
             "quality_llm": app.state.deps.quality_llm.name,
-            "runbook_index": _index_info(app.state.deps.runbook_index)}
+            "runbook_index": _index_info(app.state.deps.runbook_index),
+            "systems": {"count": len(KNOWN_SYSTEMS), "source": app.state.systems_source}}
 
 
 def _index_info(index) -> dict | None:

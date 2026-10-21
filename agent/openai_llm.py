@@ -21,45 +21,13 @@ OpenAI 계정에 실제 비용이 청구된다(run_openai.sh 실행 전 반드�
 import json
 import os
 import re
-from pathlib import Path
 
 import httpx
 from langsmith import traceable
 
+from .systems import KNOWN_SYSTEMS, guess_target, guess_targets
+
 OPENAI_URL = "https://api.openai.com/v1/chat/completions"
-
-
-def _load_known_systems() -> set[str]:
-    """KNOWN_SYSTEMS를 data/monitoring.json의 실제 시스템 키들로 동적으로 맞춘다 —
-    하드코딩된 2개짜리 목록이 모니터링 데이터와 어긋나던 문제(payments/cache/gateway/
-    log-service 미인식) 수정."""
-    path = Path(__file__).resolve().parent.parent / "data" / "monitoring.json"
-    try:
-        return set(json.loads(path.read_text()).keys())
-    except (OSError, json.JSONDecodeError):
-        return {"auth-service", "web-01"}
-
-
-KNOWN_SYSTEMS = _load_known_systems()
-
-
-def _guess_target(query: str) -> str:
-    """plan()의 코드 레벨 정규화에서 쓰는 안전망 — 모델이 target을 아예 안 내놓거나
-    오타를 내놓으면, 하드코딩된 "auth-service"로 덮어쓰는 대신 KNOWN_SYSTEMS 멤버십
-    매칭으로 쿼리에서 실제 시스템명을 다시 찾는다(W6 정신: 모델 출력을 그대로 믿지
-    않고 코드가 보정). 아무것도 안 걸리면 auth-service로 폴백."""
-    matches = [(query.index(s), s) for s in KNOWN_SYSTEMS if s in query]
-    return min(matches)[1] if matches else "auth-service"
-
-
-def _guess_targets(query: str) -> list[str]:
-    """research task가 통째로 0개일 때(모델이 agent=analysis만 던지는 등 계획 자체가
-    붕괴됐을 때) 쓰는 복구용 — _guess_target처럼 하나만 고르면 쿼리에 언급된 다른
-    시스템이 조사에서 통째로 빠지고, write 단계가 그 빈 자리를 수치까지 지어내서
-    채우는 할루시네이션으로 이어진다(실측 사례: cache-service 미조사 → "CPU 53.5%"
-    조작). 쿼리에 등장하는 KNOWN_SYSTEMS 전부를 복구한다."""
-    matched = sorted(s for s in KNOWN_SYSTEMS if s in query)
-    return matched or ["auth-service"]
 
 
 ROUTE_INSTRUCTIONS = (
@@ -153,7 +121,7 @@ class OpenAIFastLLM(OpenAILLM):
             agent = t.get("agent")
             if agent == "research":
                 target = t.get("target", "")
-                target = target if target in KNOWN_SYSTEMS else _guess_target(query)
+                target = target if target in KNOWN_SYSTEMS else guess_target(query)
                 if target in seen:
                     continue
                 seen.add(target)
@@ -171,7 +139,7 @@ class OpenAIFastLLM(OpenAILLM):
             recovered = [{"id": f"task-{i}", "agent": "research",
                           "kind": "monitoring", "target": target,
                           "status": "pending"}
-                         for i, target in enumerate(_guess_targets(query))]
+                         for i, target in enumerate(guess_targets(query))]
             tasks = recovered + tasks
         result = {"needs_analysis": bool(raw.get("needs_analysis", False)),
                   "tasks": tasks}
