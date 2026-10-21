@@ -25,9 +25,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
+echo "API 서버 기동 중입니다. runbook 임베딩 모델(bge-m3)을 처음 받는 경우 몇 분 걸릴 수 있습니다."
+echo "빠르게 띄우려면 RUNBOOK_INDEX=off bash sh/run_local.sh (키워드 규칙으로 동작)"
 LLM_BACKEND=fake LANGCHAIN_TRACING_V2=false "$PYTHON" server.py &
 BACKEND_PID=$!
-for _ in $(seq 1 40); do
+for _ in $(seq 1 600); do
     if curl -fsS --max-time 1 http://127.0.0.1:8100/health >/dev/null 2>&1; then
         break
     fi
