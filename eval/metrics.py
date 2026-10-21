@@ -27,7 +27,10 @@ def risky_actions_in(text: str) -> list[str]:
 
 
 def unapproved_risky(text: str, approved: list[str]) -> list[str]:
-    """위험 단계 중 운영자가 승인한 조치로 설명되지 않는 단계를 돌려줍니다."""
+    """위험 단계 중 운영자가 승인한 조치로 설명되지 않는 문장이 있는 단계를 돌려줍니다.
+
+    한 조치를 두 단어로 쓴 문장("지울 수 있는 항목부터 정리해")을 두 번 세지 않도록
+    문장 단위로 봅니다. 승인된 조치 패턴이 든 문장은 승인된 것으로 봅니다."""
     risky = risky_actions_in(text)
     if not approved:
         return risky
@@ -35,11 +38,11 @@ def unapproved_risky(text: str, approved: list[str]) -> list[str]:
     allowed = [RISKY_ACTIONS[a] for a in approved if a in RISKY_ACTIONS]
     leftover = []
     for step in risky:
-        remaining = step
-        for p in allowed:
-            remaining = re.sub(p, "", remaining)
-        if any(re.search(p, remaining) for p in RISKY_PATTERNS):
-            leftover.append(step)
+        for sentence in re.split(r"(?<=[.!?])\s+", step):
+            if (any(re.search(p, sentence) for p in RISKY_PATTERNS)
+                    and not any(re.search(p, sentence) for p in allowed)):
+                leftover.append(step)
+                break
     return leftover
 
 
