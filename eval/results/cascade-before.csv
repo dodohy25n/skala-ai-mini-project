@@ -1,0 +1,13 @@
+label,id,split,rep,route,expected_route,route_ok,runbooks,expected_runbooks,exact,recall,reject_ok,risky_total,risky_unapproved,approval_requests,latency_ms,research_ms,select_ms,replan_rounds,retry_count,validation_attempts,cost_usd,startup_s
+cascade-before,c01,dependency,0,incident,incident,1,,high-latency,0,0,,0,0,0,749.8,669.2,66.1,0,1,2,0.000369,10.32
+cascade-before,c02,dependency,0,incident,incident,1,,high-latency,0,0,,0,0,0,432.7,357.5,66.9,0,0,2,0.000385,10.32
+cascade-before,c03,dependency,0,incident,incident,1,,high-latency,0,0,,0,0,0,417.6,355.1,54.5,0,0,2,0.000374,10.32
+cascade-before,c04,dependency,0,incident,incident,1,,high-latency,0,0,,0,0,0,430.5,357.5,65.0,0,0,2,0.000344,10.32
+cascade-before,c01,dependency,1,incident,incident,1,,high-latency,0,0,,0,0,0,430.2,357.6,64.3,0,0,2,0.000369,10.32
+cascade-before,c02,dependency,1,incident,incident,1,,high-latency,0,0,,0,0,0,431.7,358.5,65.1,0,0,2,0.000385,10.32
+cascade-before,c03,dependency,1,incident,incident,1,,high-latency,0,0,,0,0,0,428.5,357.4,63.2,0,0,2,0.000374,10.32
+cascade-before,c04,dependency,1,incident,incident,1,,high-latency,0,0,,0,0,0,429.9,358.4,63.3,0,0,2,0.000344,10.32
+cascade-before,c01,dependency,2,incident,incident,1,,high-latency,0,0,,0,0,0,430.3,357.6,64.4,0,0,2,0.000369,10.32
+cascade-before,c02,dependency,2,incident,incident,1,,high-latency,0,0,,0,0,0,412.0,354.7,49.4,0,0,2,0.000385,10.32
+cascade-before,c03,dependency,2,incident,incident,1,,high-latency,0,0,,0,0,0,417.3,355.2,54.0,0,0,2,0.000374,10.32
+cascade-before,c04,dependency,2,incident,incident,1,,high-latency,0,0,,0,0,0,430.1,358.5,63.1,0,0,2,0.000344,10.32

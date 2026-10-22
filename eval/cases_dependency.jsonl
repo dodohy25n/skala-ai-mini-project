@@ -1,0 +1,4 @@
+{"id": "c01", "split": "dependency", "query": "web-01 로그인하면 에러 페이지가 떠요", "expected_route": "incident", "expected_runbooks": {"auth-service": "high-latency"}}
+{"id": "c02", "split": "dependency", "query": "web-01에서 로그인이 안 된다는 문의가 들어와요", "expected_route": "incident", "expected_runbooks": {"auth-service": "high-latency"}}
+{"id": "c03", "split": "dependency", "query": "web-01 로그인 화면에서 자꾸 오류가 나요", "expected_route": "incident", "expected_runbooks": {"auth-service": "high-latency"}}
+{"id": "c04", "split": "dependency", "query": "web-01 세션이 자꾸 끊겨요", "expected_route": "incident", "expected_runbooks": {"auth-service": "high-latency"}}

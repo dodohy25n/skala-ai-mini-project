@@ -107,9 +107,84 @@ LANGCHAIN_TRACING_V2=true LANGCHAIN_PROJECT=w15-after python eval/run_bench.py -
 | --- | --- | --- |
 | ![](../../docs/images/09_langsmith_after_interrupt.jpg) | ![](../../docs/images/10_langsmith_after_resume.jpg) | ![](../../docs/images/11_langsmith_trace_list.jpg) |
 
+## 정상 시스템의 연쇄 장애 질문 (의존 시스템 조사)
+
+web-01은 지표가 정상이고 알림이 없습니다. 그래서 "web-01 로그인하면 에러 페이지가 떠요"처럼 증상만 말하는 질문은
+질문 문장으로도 runbook을 고르지 못해 "맞는 매뉴얼 없음"으로 끝났습니다. 원인 후보인 auth-service(p95 2.4s, 커넥션 풀 92%)가
+조사 대상에 없었기 때문입니다.
+
+### 의존 관계 데이터
+
+`data/dependencies.json`에 1단계 의존만 적었고, MCP `get_dependencies(system_name)` Tool이 이를 `{"system_name", "depends_on"}`으로 돌려줍니다.
+
+| 시스템 | 의존 대상 | 근거 |
+| --- | --- | --- |
+| web-01 | auth-service | 로그인과 세션 확인을 auth-service에 맡기는 웹 서버로 가정했습니다 |
+| payments-service | cache-service | 결제 처리 중 캐시를 읽는 구조로 가정했습니다 |
+| gateway-service | payments-service | gateway 알림의 `upstream timeout to payments-service`와 맞춥니다 |
+| auth-service, cache-service, log-service | 없음 | 요청 경로에서 호출하는 대상을 두지 않았습니다 |
+
+### 규칙
+
+판단은 LLM이 아니라 `agent/dependency.py`의 `expansion_origins()`가 내립니다. 시스템이 정상인지는 모니터링 결과가 있어야 알 수 있으므로,
+첫 조사 직후 `dependency` 노드에서 한 번만 실행합니다. 세 조건이 모두 맞을 때만 의존 대상을 모니터링 조사에 더합니다(`DependencyAdded`).
+
+1. 질문에 이름이 나온 시스템이 healthy입니다.
+2. 질문에 증상 표현(`에러|오류|실패|안 되|끊기|먹통|느려|지연|타임아웃`)이 있습니다.
+3. 질문 문장으로 그 시스템의 runbook을 고르지 못했습니다.
+
+더한 시스템은 자기 모니터링 상태와 알림으로 runbook을 고르고, 근거(`basis`)를 `dependency`로 남깁니다. 그 시스템에서 runbook을 찾으면
+증상을 말한 정상 시스템은 원인이 설명됐으므로 "매뉴얼 없음"으로 남기지 않습니다. 답변에는 "web-01 지표는 정상이지만 의존 대상인
+auth-service 지표가 저하 상태라 ..." 문장이 들어갑니다. 조건 3은 기존 t07("web-01 DB 연결이 안 돼요"), t08("web-01 응답이 느려졌어요") 때문에
+넣었습니다. 둘 다 증상 표현이 있지만 정답이 web-01 자체 runbook이라, 조건 1, 2만 두면 auth-service의 high-latency가 섞여 틀립니다.
+
+### 측정
+
+새 질문 4개(`eval/cases_dependency.jsonl`)의 정답은 데이터로 정했습니다. web-01에는 알림이 없고 auth-service 알림이 high-latency에 맞으므로
+모두 `{"auth-service": "high-latency"}`입니다. before는 변경 전 커밋(`49989fa`)을 `git worktree`로 꺼내 같은 질문 파일로 쟀습니다.
+
+```bash
+git worktree add --detach <임시 폴더> 49989fa
+(cd <임시 폴더> && python eval/run_bench.py --label cascade-before --oracle-route --repeat 3 \
+   --cases <이 저장소>/eval/cases_dependency.jsonl --out <이 저장소>/eval/results/cascade-before.csv)
+python eval/run_bench.py --label cascade-after --oracle-route --repeat 3 --cases eval/cases_dependency.jsonl
+python eval/run_bench.py --label after-dependency --oracle-route --repeat 3
+python eval/report.py cascade-before cascade-after
+```
+
+| 지표 | cascade-before | cascade-after |
+| --- | --- | --- |
+| runbook 정확 일치 | 0.0 | 1.0 |
+| 승인 없이 나간 위험 조치 | 0/0 | 0/12 |
+| 승인 요청 수 | 0 | 12 |
+| latency p50 (ms) | 430.1 | 1250.0 |
+| runbook 선택 p50 (ms) | 63.8 | 101.7 |
+| cost 평균 (usd) | 0.000368 | 0.000689 |
+
+- before는 4문항 모두 web-01 "매뉴얼 없음"으로 끝났습니다. after는 auth-service의 high-latency를 골라 4문항 모두 맞혔습니다.
+- high-latency runbook의 "로드밸런서에서 일시 제외"가 답에 들어가 승인 요청이 3회 × 4문항 = 12번 생겼고, 승인 없이 나간 위험 조치는 없습니다.
+- 지연이 약 820ms 늘었습니다. 조사가 한 번에서 세 번(의존 시스템 모니터링, 이전에는 없던 runbook 조회)으로 늘어 research의 고정 지연 0.35s가 두 번 더 붙었기 때문입니다.
+  runbook 선택 시간은 web-01 질문 문장과 auth-service 알림을 둘 다 분류해 64ms에서 102ms로 늘었습니다.
+- 질문당 MCP 호출은 Tool 1회에서 3회(`get_monitoring_status` 2, `get_dependencies` 1)로, Resource는 0회에서 1회로 늘었습니다.
+
+기존 26문항은 `after-dependency`로 다시 재서 `after-final`과 78행을 비교했습니다. 구조 열(id, rep, route, runbooks, replan_rounds,
+validation_attempts, approval_requests, risky_total, risky_unapproved)이 모두 같고, 정확 일치 1.0, 승인 요청 54, 위험 조치 0/66, 평균 비용도 그대로입니다.
+26문항 중 증상 표현이 있는 질문은 7개였고, 이름이 나온 정상 시스템이 있는 것은 t07, t08뿐이며 둘 다 조건 3에서 걸러졌습니다.
+대신 이 두 질문은 분류를 한 번 더 해 지연이 10~50ms 늘었습니다.
+
+### 한계
+
+- 의존 데이터가 틀리면 엉뚱한 시스템을 원인으로 지목합니다. 이 파일은 실제 호출 관계를 수집한 것이 아니라 위 가정으로 손으로 적은 것이고,
+  1단계만 보므로 auth-service 뒤의 DB 같은 2단계 원인은 찾지 못합니다.
+- 의존 조사가 일어나는 질문은 MCP 호출과 조사 단계가 늘어 위처럼 느려집니다.
+- 증상 판단은 키워드 규칙입니다. "web-01 접속이 이상해요"처럼 목록에 없는 표현은 의존 조사로 가지 않습니다. 조건 3은 분류기에 기대므로
+  "web-01 로그인 요청이 실패해요"는 bge-m3가 db-down(0.572, 임계값 0.56)을 골라 web-01 자체 문제로 판정했고 의존 조사가 일어나지 않았습니다.
+  두 문장은 측정 세트에 넣지 않고 점수만 따로 확인했습니다.
+- 새 질문 4개는 모두 web-01 → auth-service 한 경로입니다. 현재 데이터에서 정상인 시스템이 web-01뿐이라 다른 경로는 측정하지 못했습니다.
+
 ## 단위 테스트
 
 ```bash
-python -m pytest -m "not slow"   # 54개, 약 12초 (MCP 서버 프로세스 없이 FakeMCP)
-python -m pytest -m slow         # 8개, 실제 bge-m3
+python -m pytest -m "not slow"   # 79개, 약 14초 (MCP 서버 프로세스 없이 FakeMCP)
+python -m pytest -m slow         # 14개, 실제 bge-m3
 ```

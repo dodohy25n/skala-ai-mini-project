@@ -1,0 +1,13 @@
+label,id,split,rep,route,expected_route,route_ok,runbooks,expected_runbooks,exact,recall,reject_ok,risky_total,risky_unapproved,approval_requests,latency_ms,research_ms,select_ms,replan_rounds,retry_count,validation_attempts,cost_usd,startup_s
+cascade-after,c01,dependency,0,incident,incident,1,high-latency,high-latency,1,1,,1,0,1,1569.9,1376.2,105.5,1,1,2,0.000689,8.78
+cascade-after,c02,dependency,0,incident,incident,1,high-latency,high-latency,1,1,,1,0,1,1236.5,1067.9,98.8,1,0,2,0.00071,8.78
+cascade-after,c03,dependency,0,incident,incident,1,high-latency,high-latency,1,1,,1,0,1,1216.5,1062.9,95.6,1,0,2,0.000694,8.78
+cascade-after,c04,dependency,0,incident,incident,1,high-latency,high-latency,1,1,,1,0,1,1253.2,1070.5,103.2,1,0,2,0.000664,8.78
+cascade-after,c01,dependency,1,incident,incident,1,high-latency,high-latency,1,1,,1,0,1,1248.6,1069.6,104.2,1,0,2,0.000689,8.78
+cascade-after,c02,dependency,1,incident,incident,1,high-latency,high-latency,1,1,,1,0,1,1244.4,1069.0,101.5,1,0,2,0.00071,8.78
+cascade-after,c03,dependency,1,incident,incident,1,high-latency,high-latency,1,1,,1,0,1,1233.4,1066.0,98.8,1,0,2,0.000694,8.78
+cascade-after,c04,dependency,1,incident,incident,1,high-latency,high-latency,1,1,,1,0,1,1245.2,1067.5,99.2,1,0,2,0.000664,8.78
+cascade-after,c01,dependency,2,incident,incident,1,high-latency,high-latency,1,1,,1,0,1,1251.5,1070.4,101.9,1,0,2,0.000689,8.78
+cascade-after,c02,dependency,2,incident,incident,1,high-latency,high-latency,1,1,,1,0,1,1253.5,1071.1,96.7,1,0,2,0.00071,8.78
+cascade-after,c03,dependency,2,incident,incident,1,high-latency,high-latency,1,1,,1,0,1,1254.7,1071.2,106.6,1,0,2,0.000694,8.78
+cascade-after,c04,dependency,2,incident,incident,1,high-latency,high-latency,1,1,,1,0,1,1263.6,1074.7,105.3,1,0,2,0.000664,8.78
