@@ -122,7 +122,13 @@ async def main(args):
             if oracle is not None:
                 oracle.expected_route = case["expected_route"]
             thread_id = f"bench-{args.label}" if args.same_thread else f"bench-{case['id']}-{rep}"
-            r = await run_case(graph, case, thread_id, args.decision)
+            try:
+                r = await asyncio.wait_for(run_case(graph, case, thread_id, args.decision),
+                                           timeout=args.case_timeout)
+            except asyncio.TimeoutError:
+                # 실모델이 생성을 끝내지 않는 경우가 있어 질문 하나가 전체 측정을 붙잡지 않게 합니다
+                r = {"route": "timeout", "final": "", "events": [], "node_ms": {},
+                     "approval_requests": 0, "latency_ms": args.case_timeout * 1000}
             got = runbooks_of(r)
             scores = score_runbooks(case.get("expected_runbooks", {}), got)
             final_text = r.get("final", "") or ""
@@ -194,4 +200,5 @@ if __name__ == "__main__":
     p.add_argument("--decision", default="approve", help="승인 요청이 오면 자동으로 보낼 결정")
     p.add_argument("--same-thread", action="store_true", help="모든 질문을 한 대화(thread)로 보냄")
     p.add_argument("--out", default=None)
+    p.add_argument("--case-timeout", type=float, default=None, help="질문 하나의 제한 시간(초). 넘으면 route=timeout으로 기록")
     asyncio.run(main(p.parse_args()))
