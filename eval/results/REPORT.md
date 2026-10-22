@@ -78,7 +78,31 @@ python eval/report.py before after-select after-rag after-final after-final-reje
 | cache-service 메모리 사용률이 계속 올라가요 (모두 거절) | memory-leak 선택 → 재시작 승인 요청 → 거절 → 재작성본에 배포 롤백이 들어와 다시 요청 → 거절 → 해당 문장 제거. 최종 답에 위험 조치 없음 |
 | web-01 배포 담당자가 누구야? | 매뉴얼 없음 → 절차를 지어내지 않고 담당자 확인이 필요하다고 답함, 승인 요청 없음 |
 
-정량 측정은 하지 않았습니다. 로컬 CPU 추론이라 한 질문에 28~71초가 걸렸고, 같은 시간에 측정과 화면 확인이 함께 돌아 runbook 선택 시간도 0.5~4.3초로 흔들렸습니다.
+두 질문 확인 뒤 장애 질문 24개(`cases.jsonl`의 장애 질문)를 개선 전 코드(`7ff9120`, `git worktree`)와 현재 코드로 한 번씩 돌렸습니다. 라우터는 정답으로 고정했습니다. 개선 후 실행은 질문 하나가 300초를 넘으면 끊고 `route=timeout`으로 남겼고(`--case-timeout 300`), 개선 전은 모두 300초 안에 끝났습니다. 원문은 `ollama-before.csv`, `ollama-after.csv`입니다.
+
+```bash
+LLM_BACKEND=ollama OLLAMA_FAST_MODEL=qwen3:0.6b OLLAMA_QUALITY_MODEL=qwen3:8b \
+  python eval/run_bench.py --label ollama-after --oracle-route --repeat 1 --case-timeout 300 \
+  --cases <장애 질문 24개 jsonl> --out eval/results/ollama-after.csv
+```
+
+| 지표 | 개선 전 | 개선 후 |
+| --- | --- | --- |
+| runbook 정확 일치(시간 초과는 오답) | 0.5 (12/24) | 0.667 (16/24) |
+| 끝난 21개만 놓고 본 정확 일치 | 0.476 (10/21) | 0.762 (16/21) |
+| 승인 없이 나간 위험 조치 | 12/12 | 0/11 |
+| 승인 요청 | 0 | 9 |
+| 300초 안에 끝나지 않은 질문 | 0 | 3 (d03, d08, t02) |
+| 지연 중앙값 / 최대(끝난 질문) | 36.8초 / 92.8초 | 37.4초 / 77.0초 |
+| runbook 선택 중앙값 | 0초 | 3.6초 |
+| 기동 | 0.65초 | 8.74초 |
+| 비용 평균(가상 단가) | 0.005853 usd | 0.005718 usd |
+
+- CSV의 `exact` 열은 시간 초과 행도 기대값과 빈 결과를 그대로 비교합니다. 매뉴얼이 없어야 하는 d08은 시간 초과인데도 `exact=1`로 찍혀 있어, 위 표에서는 오답으로 다시 셌습니다. CSV 요약 출력의 0.708과 다른 이유입니다.
+- 시간 초과 위치: d03, t02는 `write_node`의 qwen3:8b 스트림(`_chat_stream`), d08은 `analysis_node`의 qwen3:0.6b 호출(`_chat`)이었습니다. 어댑터에 생성 길이 상한이 없어 생성이 끝나지 않은 것으로 봅니다. 개선 전 실측에서는 없던 일인데, 프롬프트에 들어가는 사실이 늘어난 탓인지는 확인하지 못했습니다.
+- 개선 후에도 틀린 5개 중 4개(d04, d05, d06, t05)는 두 시스템이 함께 나온 질문에서 한 시스템의 매뉴얼만 나온 경우입니다. t09(billing-service)는 high-latency가 골라졌는데, 실모델 어댑터가 모니터링 대상이 아닌 시스템을 auth-service로 바꾸는 빈틈과 같은 모양입니다. 두 시스템 질문의 원인은 확인하지 못했습니다.
+- runbook 선택 3.6초는 bge-m3와 Ollama가 같은 기기에서 함께 돌아 생긴 값입니다. fake 측정의 63ms와 크게 다릅니다.
+- 1회 측정이라 실모델의 흔들림은 반영하지 못했습니다.
 
 ## LangSmith 추적으로 본 개선 전후
 
