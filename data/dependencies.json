@@ -1,0 +1,8 @@
+{
+  "auth-service": [],
+  "web-01": ["auth-service"],
+  "payments-service": ["cache-service"],
+  "cache-service": [],
+  "gateway-service": ["payments-service"],
+  "log-service": []
+}

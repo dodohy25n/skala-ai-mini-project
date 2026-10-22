@@ -9,6 +9,7 @@ FastAPI 백엔드(server.py)가 lifespan에서 이 파일을 subprocess(stdio)�
 프로세스가 살아 있는 동안 재사용한다 (Wave 1 싱글턴 + Wave 2 표준화의 결합).
 
 - Tool    get_monitoring_status : 호출마다 값이 달라지는 동적 조회 → Tool이 맞다
+- Tool    get_dependencies : 시스템의 1단계 의존 대상(data/dependencies.json)
 - Resource runbook://incident-response/{incident_type} : URI로 식별되는 정적 문서
 - Prompt  incident_analysis_prompt : 여러 Tool을 조합하는 표준 진단 절차를 강제
 """
@@ -62,6 +63,16 @@ def list_systems() -> dict:
     """모니터링 대상 시스템 이름 목록을 반환합니다. 에이전트는 기동할 때 이 목록을 받아 씁니다."""
     monitoring_data = json.loads((DATA_DIR / "monitoring.json").read_text())
     return {"systems": sorted(monitoring_data)}
+
+
+@mcp.tool()
+def get_dependencies(system_name: str) -> dict:
+    """시스템이 요청 처리 중에 직접 호출하는 시스템(1단계 의존 대상) 목록을 반환합니다.
+
+    지표가 정상인 시스템에 증상이 보이면 원인이 그 시스템이 호출하는 쪽에 있을 수 있어,
+    에이전트는 이 목록으로 함께 조사할 시스템을 정합니다. 목록에 없는 시스템은 의존 대상이 없는 것으로 답합니다."""
+    dependencies = json.loads((DATA_DIR / "dependencies.json").read_text())
+    return {"system_name": system_name, "depends_on": dependencies.get(system_name, [])}
 
 
 @mcp.resource("runbook://incident-response/{incident_type}")

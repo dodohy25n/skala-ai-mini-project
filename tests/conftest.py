@@ -12,6 +12,7 @@ from agent.runbook_select import keyword_classify
 
 DATA = Path(__file__).resolve().parent.parent / "data"
 MONITORING = json.loads((DATA / "monitoring.json").read_text())
+DEPENDENCIES = json.loads((DATA / "dependencies.json").read_text())
 
 
 class FakeMCP:
@@ -28,6 +29,8 @@ class FakeMCP:
         system = arguments["system_name"]
         if system in self.broken:
             raise ValueError("tool failed")
+        if name == "get_dependencies":
+            return {"system_name": system, "depends_on": DEPENDENCIES.get(system, [])}
         if system not in MONITORING:
             return {"system_name": system, "status": "unknown", "cpu_percent": 0.0,
                     "memory_percent": 0.0, "alerts": [f"System '{system}' not found in monitoring"]}
