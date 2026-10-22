@@ -17,6 +17,7 @@ class AgentState(TypedDict, total=False):
     tasks: list[dict]
     gate_removed: int
     collected: list[dict]
+    dependency_checked: bool
     replan_rounds: int
     research_sufficient: bool
     runbook_picks: dict

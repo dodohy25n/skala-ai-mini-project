@@ -33,3 +33,17 @@ def test_scores_are_aggregated_by_max_per_type(index):
     ranked = index.search("payments-service 알림: CPU 91% (threshold 80%)")
     assert len({r["incident_type"] for r in ranked}) == len(ranked)
     assert ranked == sorted(ranked, key=lambda r: -r["score"])
+
+
+@pytest.mark.parametrize("query, expected", [
+    ("web-01 로그인하면 에러 페이지가 떠요", ["web-01"]),
+    ("web-01에서 로그인이 안 된다는 문의가 들어와요", ["web-01"]),
+    ("web-01 로그인 화면에서 자꾸 오류가 나요", ["web-01"]),
+    ("web-01 세션이 자꾸 끊겨요", ["web-01"]),
+    ("web-01 DB 연결이 안 돼요", []),
+    ("web-01 응답이 느려졌어요", []),
+])
+def test_dependency_rule_with_real_classifier(index, query, expected):
+    from agent.dependency import expansion_origins
+    from tests.conftest import monitoring
+    assert expansion_origins(query, monitoring("web-01"), index.classify) == expected

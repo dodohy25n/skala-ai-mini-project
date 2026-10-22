@@ -147,6 +147,7 @@ const STEP_LABELS = {
   TaskCompleted: e => (e.source === 'monitoring'
       ? `모니터링 지표 확인 (시스템: ${e.target})`
       : `대응 매뉴얼(runbook) 조회 (장애유형: ${e.target})`) + (e.retries ? ' (재시도 성공)' : ''),
+  DependencyAdded: e => `연관 시스템 조사: ${e.depends_on.join(', ')} (${e.system} 정상, 의존 대상 확인)`,
   RunbookSelected: e => e.picks?.length
       ? `대응 매뉴얼 선택: ${e.picks.map(p => `${p.system} → ${p.incident_type}`).join(', ')}`
       : null,

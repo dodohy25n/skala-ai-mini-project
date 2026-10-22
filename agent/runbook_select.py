@@ -7,9 +7,13 @@ gateway 타임아웃 질문에 함께 조회한 payments의 CPU 알림이 섞여
 - 저하(degraded/down)된 시스템은 그 시스템의 알림만 봅니다.
 - 정상이지만 질문에 이름이 나온 시스템은 질문 문장을 봅니다.
 - 정상이고 질문에도 없는 시스템(비교용으로 함께 조회한 시스템)은 건너뜁니다.
+- 의존 조사로 더한 시스템(agent/dependency.py)도 자기 모니터링 상태로 판단하고 근거를 dependency로 남깁니다.
+  그 시스템에서 runbook을 고르면 증상을 말한 정상 시스템은 원인이 설명됐으므로 "없음"으로 남기지 않습니다.
 - 모니터링 대상이 아닌 시스템과 아무 유형에도 맞지 않는 경우는 고르지 않고 "없음"으로 남깁니다.
 """
 from typing import Callable
+
+from .dependency import dependency_of
 
 KEYWORD_RULES = [
     ("latency", "high-latency"),
@@ -37,6 +41,7 @@ def keyword_classify(text: str) -> dict | None:
 def select_runbooks(query: str, collected: list[dict],
                     classify: Classifier = keyword_classify) -> tuple[list[dict], list[dict]]:
     picks, misses, seen = [], [], set()
+    origin_of = dependency_of(collected)
     for c in collected:
         if c.get("source") != "monitoring":
             continue
@@ -50,7 +55,8 @@ def select_runbooks(query: str, collected: list[dict],
             misses.append({"system": system, "reason": "모니터링 대상이 아닙니다"})
             continue
         if status in ("degraded", "down"):
-            text, basis = f"{system} 알림: " + ", ".join(data.get("alerts", [])), "alerts"
+            text = f"{system} 알림: " + ", ".join(data.get("alerts", []))
+            basis = "dependency" if system in origin_of else "alerts"
         elif system in query:
             text, basis = query, "query"
         else:
@@ -61,7 +67,8 @@ def select_runbooks(query: str, collected: list[dict],
             continue
         picks.append({"system": system, "incident_type": hit["incident_type"],
                       "score": hit["score"], "basis": basis})
-    return picks, misses
+    explained = {origin_of[p["system"]] for p in picks if p["basis"] == "dependency"}
+    return picks, [m for m in misses if m["system"] not in explained]
 
 
 def group_by_type(picks: list[dict]) -> dict[str, list[str]]:

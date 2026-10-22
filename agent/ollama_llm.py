@@ -16,6 +16,7 @@ import re
 import httpx
 from langsmith import traceable
 
+from .dependency import dependency_reason
 from .systems import KNOWN_SYSTEMS, guess_target, guess_targets
 
 OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
@@ -227,6 +228,9 @@ class OllamaQualityLLM(OllamaLLM):
                 facts.append(f"- 대응 매뉴얼 없음: {names} (이 시스템에는 절차를 지어내지 말고 담당자 확인이 필요하다고 쓸 것)")
             elif c["source"] == "analysis":
                 facts.append(f"- 패턴 분석: {c['data'].strip()}")
+            elif c["source"] == "dependency":
+                facts.append(f"- 의존 관계: {dependency_reason(c, collected)} "
+                             f"(답변에 이 이유를 밝힐 것)")
         user = f"## 사용자 요청\n{query}\n\n## 수집된 사실\n" + "\n".join(facts)
         if feedback:
             user += f"\n\n## 이전 초안에 대한 반려 사유 (반드시 반영)\n{feedback}"

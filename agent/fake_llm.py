@@ -8,6 +8,8 @@ import re
 
 from langsmith import traceable
 
+from .dependency import dependency_reason
+
 
 class FakeLLM:
     def __init__(self, name: str, usd_per_1k_tokens: float):
@@ -123,6 +125,9 @@ class QualityLLM(FakeLLM):
             for c in mon)
         lines = [f"'{query}' 진단 결과:", f"1) 모니터링: {summary}"]
         n = 2
+        for c in [c for c in collected if c["source"] == "dependency"]:
+            lines.append(f"{n}) 의존 관계: {dependency_reason(c, collected)}")
+            n += 1
         for c in run:
             body_lines = [l.strip() for l in c["data"].strip().splitlines() if l.strip()]
             title = body_lines[0].lstrip("# ")
